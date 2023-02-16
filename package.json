@@ -1,0 +1,15 @@
+{
+  "name": "rpc-adapter",
+  "version": "1.0.0",
+  "description": "RPC Adapter for tine20",
+  "main": "rpc-adapter.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tine-groupware/RPCAdapter.git"
+  },
+  "author": "Sohan Deshar",
+  "license": "MIT"
+}
