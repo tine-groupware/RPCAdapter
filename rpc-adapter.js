@@ -78,7 +78,7 @@ export default class RPCAdapter {
         this.headers = {
             ..._headers
         };
-        return this.rpc;
+        return this;
     }
 
     setOtherOptions(options) {
@@ -88,7 +88,7 @@ export default class RPCAdapter {
         this.otherOptions = {
             ...options
         }
-        return this.rpc;
+        return this;
     }
 
     set_Timeout(timeout) {
@@ -96,29 +96,29 @@ export default class RPCAdapter {
             throw new Error('Timeout(ms) has to be a valid number')
         }
         this.timeout = timeout;
-        return this.rpc;
+        return this;
     }
 
     setUrl(url) {
         if (url) {
             this.url = url;
         }
-        return this.rpc;
+        return this;
     }
 
     setUIDGenerator(generateUID) {
         this.generateUID = generateUID;
-        return this.rpc;
+        return this;
     }
 
     setJsonKey(key) {
         this.jsonKey = key;
-        return this.rpc;
+        return this;
     }
 
     buildFetchArgs() {
-        if(!this.jsonKey || !this.url){
-            throw new Error('RPCAdapter Error: JsonKey and/or URL has not been set')
+        if(!this.url){
+            throw new Error('RPCAdapter Error: URL has not been set')
         }
 
         const options = {
@@ -132,8 +132,10 @@ export default class RPCAdapter {
         }
 
         const transactionId = this.generateUID();
-        options.headers['X-Tine20-Transactionid'] = transactionId;
-        options.headers['x-tine20-jsonkey'] = this.jsonKey;
+        if(this.jsonKey){
+            options.headers['x-tine20-jsonkey'] = this.jsonKey;
+        }
+
         const fetchResource = `${this.url}?transactionid=${transactionId}`;
 
         return {
@@ -168,12 +170,10 @@ export default class RPCAdapter {
         return new Proxy(this, {
             // eslint-disable-next-line
             get: (target, prop, receiver) => {
-                if(Object.hasOwn(target, prop)){
-                    if(typeof target[prop] === 'function'){
-                        return target[prop];
-                    } else {
-                        throw new Error('The internal properties cannot be accessed directly');
-                    }
+                if( ['createRequest', 'createNewInstance'].includes(prop) ){
+                    return target[prop];
+                } else if(['getters', 'state'].includes(prop)){ // TODO: if check required for VUE, find alternative.
+                    return null;
                 }
                 const appName = prop;
 
@@ -181,6 +181,7 @@ export default class RPCAdapter {
                     // eslint-disable-next-line
                     get: (target, prop, reciever) => {
                         const methodName = `${appName}.${prop}`;
+                        // console.log(methodName);
 
                         return (...params) => {
 
@@ -195,7 +196,11 @@ export default class RPCAdapter {
                                 this.fetch(requestBody)
                                     .then(resp => {
                                         resp.json().then(jsonResponse => {
-                                            resolve(jsonResponse.result)
+                                            if(jsonResponse.result){
+                                                resolve(jsonResponse.result);
+                                            } else {
+                                                reject(jsonResponse.error);
+                                            }
                                         })
                                     })
                                     .catch(error => {
@@ -206,10 +211,6 @@ export default class RPCAdapter {
                     }
                 })
             },
-            // eslint-disable-next-line
-            set: (target, property, value, receiver) => {
-                throw new Error('Setting property on this object is not allowed');
-            }
 
         })
     }
