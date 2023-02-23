@@ -17,13 +17,13 @@ function _generateUID(length) {
 }
 
 export default class RPCAdapter {
-    #headers;
-    #method;
-    #timeout;
-    #otherOptions;
-    #url;
-    #generateUID;
-    #jsonKey;
+    headers;
+    method;
+    timeout;
+    otherOptions;
+    url;
+    generateUID;
+    jsonKey;
     static #counter = 0;
     static #allowConstruction = false;
 
@@ -32,13 +32,13 @@ export default class RPCAdapter {
             console.warn('Singletons cannot be created twice');
             return RPCAdapter._instance;
         }
-        this.#timeout = timeout;
-        this.#method = method;
-        this.#headers = headers;
-        this.#otherOptions = otherOptions;
-        this.#jsonKey = jsonKey;
-        this.#generateUID = generateUID;
-        this.#url = url;
+        this.timeout = timeout;
+        this.method = method;
+        this.headers = headers;
+        this.otherOptions = otherOptions;
+        this.jsonKey = jsonKey;
+        this.generateUID = generateUID;
+        this.url = url;
         if (!RPCAdapter._instance) RPCAdapter._instance = this;
     }
 
@@ -47,13 +47,13 @@ export default class RPCAdapter {
         const clone = new RPCAdapter();
         RPCAdapter.#allowConstruction = false;
         clone
-            .setHeaders({...this.#headers})
-            .setMethod(this.#method)
-            .set_Timeout(this.#timeout)
-            .setOtherOptions({...this.#otherOptions})
-            .setUrl(this.#url)
-            .setUIDGenerator(this.#generateUID)
-            .setJsonKey(this.#jsonKey);
+            .setHeaders({...this.headers})
+            .setMethod(this.method)
+            .set_Timeout(this.timeout)
+            .setOtherOptions({...this.otherOptions})
+            .setUrl(this.url)
+            .setUIDGenerator(this.generateUID)
+            .setJsonKey(this.jsonKey);
 
         return clone;
 
@@ -63,80 +63,78 @@ export default class RPCAdapter {
         return this.clone;
     }
 
-    createNewInstance(url, jsonKey, {timeout = 8000, method = 'POST', generateUID = _generateUID, headers={}, otherOptions={}} = {}) {
-        if( !url || !jsonKey){
-            throw new Error('Url and/or JsonKey missing. These are required to initialize new instance');
-        }
+    createNewInstance(url=null, jsonKey=null, {timeout = 8000, method = 'POST', generateUID = _generateUID, headers={}, otherOptions={}} = {}) {
         RPCAdapter.#allowConstruction = true;
         const instance = new RPCAdapter(url, jsonKey, {timeout, method, generateUID, headers, otherOptions});
         RPCAdapter.#allowConstruction = false;
         return instance;
     }
 
-    setHeaders(headers) {
+    setHeaders(headersObj) {
         const _headers = {};
-        Object.keys(headers).forEach(function(key, index){
-            _headers[key.toLowerCase()] = val;
+        Object.keys(headersObj).forEach(function(key){
+            _headers[key.toLowerCase()] = headersObj[key];
         })
-        this.#headers = {
+        this.headers = {
             ..._headers
         };
-        return this;
+        return this.rpc;
     }
 
     setOtherOptions(options) {
         delete options.headers;
         delete options.method;
         delete options.body;
-        this.#otherOptions = {
+        this.otherOptions = {
             ...options
         }
-        return this;
+        return this.rpc;
     }
 
     set_Timeout(timeout) {
         if (typeof timeout !== 'number') {
             throw new Error('Timeout(ms) has to be a valid number')
         }
-        this.#timeout = timeout;
-        return this;
+        this.timeout = timeout;
+        return this.rpc;
     }
 
     setUrl(url) {
         if (url) {
-            this.#url = url;
+            this.url = url;
         }
-        return this;
+        return this.rpc;
     }
 
     setUIDGenerator(generateUID) {
-        this.#generateUID = generateUID;
-        return this;
+        this.generateUID = generateUID;
+        return this.rpc;
     }
 
     setJsonKey(key) {
-        this.#jsonKey = key;
-        return this;
+        this.jsonKey = key;
+        return this.rpc;
     }
 
-    #buildFetchArgs() {
-        const options = {
-            method: this.#method,
-            headers: {
-                ...DEFAULT_FETCH_HEADERS,
-                ...this.#headers,
-            },
-            ...DEFAULT_FETCH_OPTIONS,
-            ...this.#otherOptions,
+    buildFetchArgs() {
+        if(!this.jsonKey || !this.url){
+            throw new Error('RPCAdapter Error: JsonKey and/or URL has not been set')
         }
 
-        const jsonKey = this.#jsonKey || Tine.Tinebase.registry && Tine.Tinebase.registry.get ? Tine.Tinebase.registry.get('jsonKey') : '';
-        const transactionId = this.#generateUID ? this.#generateUID() : Tine.Tinebase.data.Record.generateUID();
-        options.headers['x-tine20-transactionid'] = transactionId;
-        options.headers['x-tine20-jsonkey'] = jsonKey;
+        const options = {
+            method: this.method,
+            headers: {
+                ...DEFAULT_FETCH_HEADERS,
+                ...this.headers,
+            },
+            ...DEFAULT_FETCH_OPTIONS,
+            ...this.otherOptions,
+        }
 
-        const url = this.#url || Tine.Tinebase.tineInit.requestUrl;
-        const fetchResource = `${url}?transactionid=${transactionId}`;
+        const transactionId = this.generateUID();
+        options.headers['X-Tine20-Transactionid'] = transactionId;
+        options.headers['x-tine20-jsonkey'] = this.jsonKey;
+        const fetchResource = `${this.url}?transactionid=${transactionId}`;
 
         return {
             fetchResource,
@@ -144,15 +142,15 @@ export default class RPCAdapter {
         }
     }
 
-    async #fetch(body) {
+    async fetch(body) {
         const controller = new AbortController();
 
-        const args = this.#buildFetchArgs();
+        const args = this.buildFetchArgs();
         args.options.body = JSON.stringify(body);
 
         const id = setTimeout(() => {
             controller.abort()
-        }, this.#timeout);
+        }, this.timeout);
 
         const response = await fetch(args.fetchResource, {
             ...args.options,
@@ -168,16 +166,20 @@ export default class RPCAdapter {
 
     get rpc() {
         return new Proxy(this, {
+            // eslint-disable-next-line
             get: (target, prop, receiver) => {
-                if (prop === 'createRequest') {
-                    return this.createRequest;
-                } else if (prop === 'createNewInstance') {
-                    return this.createNewInstance;
+                if(Object.hasOwn(target, prop)){
+                    if(typeof target[prop] === 'function'){
+                        return target[prop];
+                    } else {
+                        throw new Error('The internal properties cannot be accessed directly');
+                    }
                 }
                 const appName = prop;
 
                 return new Proxy(this, {
-                    get: (target, prop, receiver) => {
+                    // eslint-disable-next-line
+                    get: (target, prop, reciever) => {
                         const methodName = `${appName}.${prop}`;
 
                         return (...params) => {
@@ -190,7 +192,7 @@ export default class RPCAdapter {
                             }
 
                             return new Promise((resolve, reject) => {
-                                this.#fetch(requestBody)
+                                this.fetch(requestBody)
                                     .then(resp => {
                                         resp.json().then(jsonResponse => {
                                             resolve(jsonResponse.result)
@@ -203,6 +205,10 @@ export default class RPCAdapter {
                         }
                     }
                 })
+            },
+            // eslint-disable-next-line
+            set: (target, property, value, receiver) => {
+                throw new Error('Setting property on this object is not allowed');
             }
 
         })
