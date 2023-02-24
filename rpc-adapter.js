@@ -144,7 +144,7 @@ export default class RPCAdapter {
         }
     }
 
-    async fetch(body) {
+    async _fetch(body) {
         const controller = new AbortController();
 
         const args = this.buildFetchArgs();
@@ -157,7 +157,19 @@ export default class RPCAdapter {
         const response = await fetch(args.fetchResource, {
             ...args.options,
             signal: controller.signal
-        });
+        }).then(resp => 
+            new Promise((resolve, reject) => {
+                resp.json().then(
+                    jsonResp => {
+                        if(jsonResp.result){
+                            resolve(jsonResp.result);
+                        } else {
+                            reject(jsonResp.error);
+                        }
+                    }
+                )
+            })
+        );
         clearTimeout(id);
         return response;
     }
@@ -193,15 +205,9 @@ export default class RPCAdapter {
                             }
 
                             return new Promise((resolve, reject) => {
-                                this.fetch(requestBody)
+                                this._fetch(requestBody)
                                     .then(resp => {
-                                        resp.json().then(jsonResponse => {
-                                            if(jsonResponse.result){
-                                                resolve(jsonResponse.result);
-                                            } else {
-                                                reject(jsonResponse.error);
-                                            }
-                                        })
+                                        resolve(resp);
                                     })
                                     .catch(error => {
                                         reject(error);
