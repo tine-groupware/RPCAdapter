@@ -1,3 +1,5 @@
+import _ from 'lodash';
+
 const DEFAULT_FETCH_HEADERS = {
     'content-type': 'application/json',
 }
@@ -5,6 +7,9 @@ const DEFAULT_FETCH_HEADERS = {
 const DEFAULT_FETCH_OPTIONS = {
     'credentials': 'include',
 }
+
+const SERVICE_MAP_URL = "?method=Tinebase.getServiceMap";
+
 function _generateUID(length) {
     length = length || 40;
 
@@ -40,6 +45,40 @@ export default class RPCAdapter {
         this.generateUID = generateUID;
         this.url = url;
         if (!RPCAdapter._instance) RPCAdapter._instance = this;
+    }
+    
+    async initializeRPCMethods({initializeOn={}}={}){
+        const me = this;
+        const sam = await fetch(SERVICE_MAP_URL)
+            .then(resp => resp.json())
+        const serviceMap = Object.keys(sam.services);
+        _.each(serviceMap, function(value){
+            const proxyFunc = _.get(me.rpc, value);
+            const functionWrapper = (...rpcParams) => {
+                // callbackPos - 0 indexed
+                let callback, callbackPos;
+                // checking if second last argument is a function
+                if(typeof rpcParams[rpcParams.length - 2] == 'function' ){
+                    callbackPos = rpcParams.length - 2;
+                    callback = rpcParams[callbackPos];
+                }
+                // checking if last argument is a function if second last was not.
+                if(!callback && 
+                    typeof rpcParams[rpcParams.length - 1] == 'function'){
+                    callbackPos = rpcParams.length - 1;
+                    callback = rpcParams[callbackPos];
+                }
+                if(callback){
+                    console.warn('Passing callback as argument to rpc calls should be avoided!!!');
+                    return proxyFunc(...rpcParams.slice(0,callbackPos)).then(response => {
+                        callback(response);
+                    })
+                } else {
+                    return proxyFunc(...rpcParams);
+                }
+            }
+            _.set( initializeOn, value, functionWrapper)
+        })
     }
 
     clone() {
@@ -157,19 +196,15 @@ export default class RPCAdapter {
         const response = await fetch(args.fetchResource, {
             ...args.options,
             signal: controller.signal
-        }).then(resp => 
-            new Promise((resolve, reject) => {
-                resp.json().then(
-                    jsonResp => {
-                        if(jsonResp.result){
-                            resolve(jsonResp.result);
-                        } else {
-                            reject(jsonResp.error);
-                        }
-                    }
-                )
-            })
-        );
+        })
+        .then(resp => resp.json())
+        .then(jsonResp => {
+            if(jsonResp.result){
+                return jsonResp.result
+            } else {
+                throw jsonResp.error
+            }
+        }) 
         clearTimeout(id);
         return response;
     }

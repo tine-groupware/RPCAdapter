@@ -11,5 +11,8 @@
     "url": "git+https://github.com/tine-groupware/RPCAdapter.git"
   },
   "author": "Sohan Deshar",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "lodash": ">=4"
+  }
 }
