@@ -2,6 +2,7 @@ import _ from 'lodash';
 
 const DEFAULT_FETCH_HEADERS = {
     'content-type': 'application/json',
+    "X-Tine20-Request-Type" : 'JSON',
 }
 
 const DEFAULT_FETCH_OPTIONS = {
